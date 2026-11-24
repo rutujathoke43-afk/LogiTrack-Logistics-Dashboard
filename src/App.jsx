@@ -1,16 +1,20 @@
-
 import { useMemo, useState } from 'react'
 import {
   LayoutDashboard, Package, Truck, Map, Warehouse, BarChart3,
   Settings, Search, Bell, Plus, Pencil, Trash2, X, Menu,
   Headphones, Mail, ChevronDown, TrendingUp, CheckCircle,
-  Clock, Moon, Sun, Send, User, LogOut
+  Clock, Send, User, LogOut, Eye, EyeOff
 } from 'lucide-react'
+
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts'
+
 import './App.css'
+
+const LOGIN_EMAIL = 'admin@logitrack.com'
+const LOGIN_PASSWORD = 'Admin@123'
 
 const initialShipments = [
   { id: 'SHP-1001', customer: 'Aarav Enterprises', origin: 'Mumbai', destination: 'Pune', date: '2026-11-20', status: 'In Transit', amount: 12500 },
@@ -97,6 +101,15 @@ const fieldConfig = {
 }
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    localStorage.getItem('logitrack_logged_in') === 'true'
+  )
+
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loginError, setLoginError] = useState('')
+
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [shipments, setShipments] = useState(initialShipments)
@@ -129,10 +142,48 @@ function App() {
       const matchesSearch = Object.values(item).some(value =>
         String(value).toLowerCase().includes(search.toLowerCase())
       )
-      const matchesStatus = statusFilter === 'All' || item.status === statusFilter
+
+      const matchesStatus =
+        statusFilter === 'All' || item.status === statusFilter
+
       return matchesSearch && matchesStatus
     })
   }, [currentData, search, statusFilter])
+
+  const handleLogin = event => {
+    event.preventDefault()
+
+    if (
+      loginEmail.trim().toLowerCase() === LOGIN_EMAIL &&
+      loginPassword === LOGIN_PASSWORD
+    ) {
+      localStorage.setItem('logitrack_logged_in', 'true')
+      setIsLoggedIn(true)
+      setLoginError('')
+      setLoginEmail('')
+      setLoginPassword('')
+      setActivePage('Dashboard')
+    } else {
+      setLoginError('Invalid email or password. Please try again.')
+    }
+  }
+
+  const handleLogout = () => {
+    const confirmed = window.confirm('Are you sure you want to logout?')
+
+    if (!confirmed) return
+
+    localStorage.removeItem('logitrack_logged_in')
+    setIsLoggedIn(false)
+    setProfileOpen(false)
+    setProfileModalOpen(false)
+    setActivePage('Dashboard')
+    setSearch('')
+    setStatusFilter('All')
+    setLoginError('')
+    setLoginEmail('')
+    setLoginPassword('')
+  }
 
   const openAdd = () => {
     setEditingItem(null)
@@ -148,6 +199,7 @@ function App() {
 
   const saveItem = event => {
     event.preventDefault()
+
     const [, setter] = dataMap[activePage]
 
     if (editingItem) {
@@ -177,6 +229,7 @@ function App() {
 
   const deleteItem = id => {
     if (!window.confirm('Are you sure you want to delete this record?')) return
+
     const [, setter] = dataMap[activePage]
     setter(old => old.filter(item => item.id !== id))
   }
@@ -194,18 +247,9 @@ function App() {
     const body = encodeURIComponent(
       supportMessage || 'Hello, I need help with LogiTrack.'
     )
-    window.location.href = `mailto:support@logitrack.com?subject=${subject}&body=${body}`
-  }
 
-  const handleLogout = () => {
-    const confirmed = window.confirm('Are you sure you want to logout?')
-    if (confirmed) {
-      setProfileOpen(false)
-      setActivePage('Dashboard')
-      setSearch('')
-      setStatusFilter('All')
-      alert('You have been logged out of the demo profile.')
-    }
+    window.location.href =
+      `mailto:support@logitrack.com?subject=${subject}&body=${body}`
   }
 
   const renderDashboard = () => (
@@ -215,6 +259,7 @@ function App() {
           <h2>Dashboard Overview</h2>
           <p>Here's what's happening with your logistics business.</p>
         </div>
+
         <span className="date-label">
           {new Date().toLocaleDateString('en-IN', {
             day: 'numeric',
@@ -240,6 +285,7 @@ function App() {
             </div>
             <span className="chart-period">Last 6 months</span>
           </div>
+
           <div className="chart-area">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData}>
@@ -266,6 +312,7 @@ function App() {
               <p>Current shipment distribution</p>
             </div>
           </div>
+
           <div className="pie-area">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -280,6 +327,7 @@ function App() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
+
             <div className="pie-legend">
               {statusData.map((item, index) => (
                 <div key={item.name}>
@@ -302,10 +350,12 @@ function App() {
             <h3>Recent Shipments</h3>
             <p>Latest shipment activity</p>
           </div>
+
           <button className="text-button" onClick={() => openPage('Shipments')}>
             View all
           </button>
         </div>
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -318,6 +368,7 @@ function App() {
                 <th>Amount</th>
               </tr>
             </thead>
+
             <tbody>
               {shipments.slice(0, 5).map(item => (
                 <tr key={item.id}>
@@ -347,6 +398,7 @@ function App() {
             <h2>{activePage}</h2>
             <p>Manage and track your {activePage.toLowerCase()}.</p>
           </div>
+
           <button className="primary-button" onClick={openAdd}>
             <Plus size={17} /> Add {activePage.slice(0, -1)}
           </button>
@@ -362,6 +414,7 @@ function App() {
                 placeholder={`Search ${activePage.toLowerCase()}...`}
               />
             </div>
+
             <select
               className="filter-select"
               value={statusFilter}
@@ -380,6 +433,7 @@ function App() {
                   <th>Actions</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filteredData.map(item => (
                   <tr key={item.id}>
@@ -392,6 +446,7 @@ function App() {
                             : item[field[0]]}
                       </td>
                     ))}
+
                     <td>
                       <div className="action-buttons">
                         <button
@@ -401,6 +456,7 @@ function App() {
                         >
                           <Pencil size={16} />
                         </button>
+
                         <button
                           className="icon-button delete"
                           title="Delete"
@@ -412,6 +468,7 @@ function App() {
                     </td>
                   </tr>
                 ))}
+
                 {filteredData.length === 0 && (
                   <tr>
                     <td colSpan={fields.length + 1} className="empty-state">
@@ -422,6 +479,7 @@ function App() {
               </tbody>
             </table>
           </div>
+
           <div className="table-footer">
             Showing {filteredData.length} of {currentData.length} records
           </div>
@@ -453,6 +511,7 @@ function App() {
             <p>Revenue overview for the last six months</p>
           </div>
         </div>
+
         <div className="chart-area">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData}>
@@ -485,6 +544,7 @@ function App() {
             <strong>Dark Mode</strong>
             <p>Switch between light and dark appearance.</p>
           </div>
+
           <button
             className={`toggle ${darkMode ? 'active' : ''}`}
             onClick={() => setDarkMode(!darkMode)}
@@ -499,6 +559,7 @@ function App() {
             <strong>Notifications</strong>
             <p>Receive shipment and delivery notifications.</p>
           </div>
+
           <button
             className={`toggle ${notifications ? 'active' : ''}`}
             onClick={() => setNotifications(!notifications)}
@@ -513,6 +574,7 @@ function App() {
             <strong>Support Email</strong>
             <p>support@logitrack.com</p>
           </div>
+
           <button className="secondary-button" onClick={() => setSupportOpen(true)}>
             Contact Support
           </button>
@@ -521,10 +583,177 @@ function App() {
     </>
   )
 
+  // LOGIN PAGE
+  if (!isLoggedIn) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        background: 'linear-gradient(135deg, #eaf1ff, #f5f7fb)'
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '420px',
+          padding: '38px',
+          borderRadius: '18px',
+          background: '#ffffff',
+          boxShadow: '0 15px 50px rgba(30, 60, 110, 0.13)'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '28px'
+          }}>
+            <div style={{
+              width: '45px',
+              height: '45px',
+              borderRadius: '12px',
+              display: 'grid',
+              placeItems: 'center',
+              background: '#3978e8',
+              color: '#fff'
+            }}>
+              <Truck size={25} />
+            </div>
+
+            <h2 style={{
+              fontSize: '27px',
+              color: '#26364d',
+              margin: 0
+            }}>
+              LogiTrack<span style={{ color: '#3978e8' }}>.</span>
+            </h2>
+          </div>
+
+          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+            <h2 style={{ color: '#26364d', marginBottom: '8px' }}>
+              Welcome Back!
+            </h2>
+            <p style={{ color: '#8995a6', fontSize: '14px' }}>
+              Sign in to your administrator account
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin}>
+            <label style={{
+              display: 'block',
+              color: '#46546a',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '8px'
+            }}>
+              Email Address
+            </label>
+
+            <input
+              type="email"
+              required
+              value={loginEmail}
+              onChange={e => setLoginEmail(e.target.value)}
+              placeholder="Enter your email"
+              style={loginInputStyle}
+            />
+
+            <label style={{
+              display: 'block',
+              color: '#46546a',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '8px',
+              marginTop: '20px'
+            }}>
+              Password
+            </label>
+
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                placeholder="Enter your password"
+                style={{ ...loginInputStyle, paddingRight: '45px' }}
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#8995a6',
+                  cursor: 'pointer'
+                }}
+              >
+                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+              </button>
+            </div>
+
+            {loginError && (
+              <p style={{
+                color: '#dc4545',
+                fontSize: '13px',
+                marginTop: '13px'
+              }}>
+                {loginError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                marginTop: '25px',
+                padding: '14px',
+                border: 'none',
+                borderRadius: '8px',
+                background: '#3978e8',
+                color: '#fff',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Login to Dashboard
+            </button>
+          </form>
+
+          <div style={{
+            marginTop: '25px',
+            padding: '13px',
+            borderRadius: '8px',
+            background: '#f4f7fc',
+            fontSize: '12px',
+            color: '#68778d',
+            lineHeight: 1.8
+          }}>
+            <strong style={{ color: '#46546a' }}>Demo Login Details</strong>
+            <br />
+            Email: {LOGIN_EMAIL}
+            <br />
+            Password: {LOGIN_PASSWORD}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`app-shell ${darkMode ? 'dark-mode' : ''}`}>
       {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
@@ -538,6 +767,7 @@ function App() {
         <nav className="nav-menu">
           {navItems.map(item => {
             const Icon = item.icon
+
             return (
               <button
                 key={item.name}
@@ -556,12 +786,12 @@ function App() {
             <div className="support-icon"><Headphones size={20} /></div>
             <strong>Need help?</strong>
             <p>Our support team is here for you.</p>
+
             <button onClick={() => setSupportOpen(true)}>
               Contact Support
             </button>
           </div>
 
-          {/* ADMIN PROFILE MENU */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
@@ -576,10 +806,12 @@ function App() {
               }}
             >
               <div className="avatar">A</div>
+
               <div>
                 <strong>Admin User</strong>
                 <span>Administrator</span>
               </div>
+
               <ChevronDown
                 size={16}
                 style={{
@@ -645,6 +877,7 @@ function App() {
             >
               <Menu size={22} />
             </button>
+
             <div>
               <h1>{activePage === 'Dashboard' ? 'Overview' : activePage}</h1>
               <p>Welcome back, Admin!</p>
@@ -659,6 +892,7 @@ function App() {
             >
               <Bell size={19} />
             </button>
+
             <div className="top-avatar">A</div>
           </div>
         </header>
@@ -689,6 +923,7 @@ function App() {
                 <h3>{editingItem ? 'Edit' : 'Add'} {activePage.slice(0, -1)}</h3>
                 <p>Enter the details below.</p>
               </div>
+
               <button className="close-button" onClick={() => setModalOpen(false)}>
                 <X size={20} />
               </button>
@@ -699,6 +934,7 @@ function App() {
                 {fieldConfig[activePage]?.map(field => (
                   <label className="form-field" key={field[0]}>
                     <span>{field[1]}</span>
+
                     {field[2] === 'select' ? (
                       <select
                         required
@@ -737,6 +973,7 @@ function App() {
                 >
                   Cancel
                 </button>
+
                 <button type="submit" className="primary-button">
                   {editingItem ? 'Save Changes' : 'Add Record'}
                 </button>
@@ -760,6 +997,7 @@ function App() {
                 <h3>My Profile</h3>
                 <p>Administrator Account Details</p>
               </div>
+
               <button
                 className="close-button"
                 onClick={() => setProfileModalOpen(false)}
@@ -783,9 +1021,11 @@ function App() {
               }}>
                 A
               </div>
+
               <h3 style={{ margin: '0 0 6px', color: darkMode ? '#ffffff' : '#29364a' }}>
                 Admin User
               </h3>
+
               <p style={{ color: '#8995a6', fontSize: '12px' }}>
                 Administrator
               </p>
@@ -800,10 +1040,12 @@ function App() {
                 <small style={{ color: '#929daf' }}>Account Name</small>
                 <strong style={{ display: 'block', marginTop: '5px' }}>Admin User</strong>
               </div>
+
               <div style={{ marginBottom: '14px' }}>
                 <small style={{ color: '#929daf' }}>Role</small>
                 <strong style={{ display: 'block', marginTop: '5px' }}>Administrator</strong>
               </div>
+
               <div>
                 <small style={{ color: '#929daf' }}>Application</small>
                 <strong style={{ display: 'block', marginTop: '5px' }}>LogiTrack Dashboard</strong>
@@ -836,6 +1078,7 @@ function App() {
                 <h3>Contact Support</h3>
                 <p>We're here to help you.</p>
               </div>
+
               <button className="close-button" onClick={() => setSupportOpen(false)}>
                 <X size={20} />
               </button>
@@ -851,6 +1094,7 @@ function App() {
 
             <label className="form-field support-message">
               <span>How can we help?</span>
+
               <textarea
                 rows="4"
                 value={supportMessage}
@@ -866,10 +1110,12 @@ function App() {
               >
                 Close
               </button>
+
               <button className="primary-button" onClick={sendSupportEmail}>
                 <Send size={16} /> Open Email App
               </button>
             </div>
+
             <p className="support-note">
               If your computer has an email app configured, it will open with your message ready to send.
             </p>
@@ -878,6 +1124,18 @@ function App() {
       )}
     </div>
   )
+}
+
+const loginInputStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '13px 14px',
+  border: '1px solid #dce3ed',
+  borderRadius: '8px',
+  outline: 'none',
+  fontSize: '14px',
+  color: '#29364a',
+  background: '#fff'
 }
 
 const profileMenuButton = {
@@ -901,9 +1159,11 @@ function StatCard({ title, value, change, icon: Icon, tone }) {
       <div className={`stat-icon ${tone}`}>
         <Icon size={21} />
       </div>
+
       <div className="stat-info">
         <span>{title}</span>
         <strong>{value}</strong>
+
         <small className={change.startsWith('-') ? 'negative' : 'positive'}>
           {change} <span>vs last month</span>
         </small>
@@ -914,7 +1174,12 @@ function StatCard({ title, value, change, icon: Icon, tone }) {
 
 function StatusBadge({ status }) {
   const normalized = status.toLowerCase().replaceAll(' ', '-')
-  return <span className={`status-badge ${normalized}`}>{status}</span>
+
+  return (
+    <span className={`status-badge ${normalized}`}>
+      {status}
+    </span>
+  )
 }
 
 export default App
