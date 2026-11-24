@@ -71,7 +71,9 @@ npm run build
 
 ## 🌐 Live Demo
 
-[Open LogiTrack Dashboard](https://logi-track-logistics-dashboard.vercel.app/)
+## 🌐 Live Demo
+
+[Open LogiTrack Dashboard](https://logi-track-logistics-dashboard-4zmx3201n-student-dashboard-team.vercel.app/)
 
 ## 👩‍💻 Developer
 
