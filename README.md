@@ -1,79 +1,84 @@
+# LogiTrack – Logistics Management Dashboard
 
-# LogiTrack – Logistics Admin Dashboard
+A modern and responsive logistics management dashboard built using React and Vite. LogiTrack helps manage shipments, routes, vehicles, warehouses, and reports through a clean and user-friendly interface.
 
-## Project Overview
+## 🚀 Features
 
-LogiTrack is a responsive logistics management dashboard built using React and Vite. It helps administrators monitor shipments, manage logistics operations, and view shipment analytics.
+- **Dashboard Overview** – View key logistics statistics and charts.
+- **Shipment Management** – Add, edit, delete, search, and manage shipments.
+- **Route Management** – Manage logistics routes.
+- **Vehicle Management** – Maintain vehicle information.
+- **Warehouse Management** – Manage warehouse records.
+- **Reports & Analytics** – Visualize logistics data using charts.
+- **Login & Logout** – Admin login page with logout functionality.
+- **Admin Profile** – Access profile and account settings.
+- **Settings** – Manage application preferences, dark mode, and notifications.
+- **Support** – Contact support through the support section.
+- **Responsive Design** – User-friendly dashboard layout.
 
-## Technologies Used
+## 🛠️ Technologies Used
 
 - React.js
 - Vite
 - JavaScript
 - CSS3
-- Recharts
 - Lucide React
+- Recharts
+- Git & GitHub
+- Vercel
 
-## Features
+## 💻 Installation & Setup
 
-- Dashboard with shipment statistics
-- Interactive charts and analytics
-- Shipment management (Add, Edit, Delete)
-- Search and sorting functionality
-- Date range filters
-- Region and category filters
-- Pagination
-- Admin and Viewer roles
-- Responsive dashboard layout
-- Mock shipment data across 12 hubs
+### 1. Clone the Repository
 
-## Installation
+```bash
+git clone https://github.com/rutujathoke43-afk/LogiTrack-Logistics-Dashboard.git
+```
 
-1. Clone or download the project.
-2. Open the project folder in VS Code.
-3. Open the terminal.
-4. Install dependencies:
+### 2. Navigate to the Project Folder
+
+```bash
+cd LogiTrack-Logistics-Dashboard
+```
+
+### 3. Install Dependencies
 
 ```bash
 npm install
 ```
 
-1. Start the development server:
+### 4. Start the Development Server
 
 ```bash
 npm run dev
 ```
 
-1. Open the localhost URL displayed in the terminal.
+Open the local URL displayed in your terminal (usually `http://localhost:5173/`).
 
-## Production Build
+## 🔐 Demo Login Credentials
 
-Run:
+**Email:** `admin@logitrack.com`
+
+**Password:** `Admin@123`
+
+> Note: This project currently uses frontend demo authentication. It is not a production-secure authentication system.
+
+## 📦 Build for Production
 
 ```bash
 npm run build
 ```
 
-The production files are generated in the `dist` folder.
+## 🌐 Live Demo
 
-## Demo Login
+[Open LogiTrack Dashboard](https://logi-track-logistics-dashboard.vercel.app/)
 
-- Enter any non-empty username and password.
-- Select Admin to access editing features.
-- Select Viewer for read-only access.
+## 👩‍💻 Developer
 
-Note: This project uses demo authentication and in-memory mock data. Changes are not permanently saved after refreshing the application.
+**Rutuja Thoke**
 
-## Future Improvements
+GitHub: [rutujathoke43-afk](https://github.com/rutujathoke43-afk)
 
-- Backend API integration
-- Database storage
-- Secure authentication
-- Server-side pagination
-- Real-time shipment tracking
-- CSV export
-- Automated testing
+---
 
-## Author
-
-LogiTrack Project
+⭐ If you like this project, feel free to star the repository!
