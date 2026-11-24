@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+
+import { useEffect, useMemo, useState } from 'react'
 import {
   LayoutDashboard, Package, Truck, Map, Warehouse, BarChart3,
   Settings, Search, Bell, Plus, Pencil, Trash2, X, Menu,
@@ -11,10 +12,8 @@ import {
   CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts'
 
+import { supabase } from './supabase'
 import './App.css'
-
-const LOGIN_EMAIL = 'admin@logitrack.com'
-const LOGIN_PASSWORD = 'Admin@123'
 
 const initialShipments = [
   { id: 'SHP-1001', customer: 'Aarav Enterprises', origin: 'Mumbai', destination: 'Pune', date: '2026-11-20', status: 'In Transit', amount: 12500 },
@@ -43,20 +42,12 @@ const initialWarehouses = [
   { id: 'WH-003', name: 'Nagpur Hub', location: 'Nagpur', capacity: '92%', manager: 'Rohit Deshmukh', status: 'Full' }
 ]
 
-const monthlyData = [
-  { month: 'Jun', shipments: 35, revenue: 42000 },
-  { month: 'Jul', shipments: 48, revenue: 51000 },
-  { month: 'Aug', shipments: 42, revenue: 47000 },
-  { month: 'Sep', shipments: 65, revenue: 68000 },
-  { month: 'Oct', shipments: 58, revenue: 62000 },
-  { month: 'Nov', shipments: 78, revenue: 85000 }
-]
-
-const statusData = [
-  { name: 'Delivered', value: 45 },
-  { name: 'In Transit', value: 30 },
-  { name: 'Pending', value: 25 }
-]
+const tableConfig = {
+  Shipments: { table: 'shipments', prefix: 'SHP', initial: initialShipments },
+  Routes: { table: 'routes', prefix: 'RTE', initial: initialRoutes },
+  Vehicles: { table: 'vehicles', prefix: 'VEH', initial: initialVehicles },
+  Warehouses: { table: 'warehouses', prefix: 'WH', initial: initialWarehouses }
+}
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard },
@@ -100,10 +91,43 @@ const fieldConfig = {
   ]
 }
 
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(
-    localStorage.getItem('logitrack_logged_in') === 'true'
+const colors = ['#22b573', '#3978e8', '#f5a623']
+
+// Supabase मधून डेटा आणणे.
+// टेबल रिकामे असल्यास सुरुवातीचा Demo Data एकदाच Save होईल.
+async function loadTable(tableName, initialData, setter) {
+  let { data, error } = await supabase
+    .from(tableName)
+    .select('id, data')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+
+  if (data.length === 0 && initialData.length > 0) {
+    const result = await supabase
+      .from(tableName)
+      .insert(initialData.map(item => ({ data: item })))
+      .select('id, data')
+
+    if (result.error) throw result.error
+    data = result.data || []
+  }
+
+  setter(
+    (data || []).map(row => ({
+      ...row.data,
+      id: row.data?.id || row.id,
+      _dbId: row.id
+    }))
   )
+}
+
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [session, setSession] = useState(null)
 
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -112,10 +136,12 @@ function App() {
 
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [shipments, setShipments] = useState(initialShipments)
-  const [routes, setRoutes] = useState(initialRoutes)
-  const [vehicles, setVehicles] = useState(initialVehicles)
-  const [warehouses, setWarehouses] = useState(initialWarehouses)
+
+  const [shipments, setShipments] = useState([])
+  const [routes, setRoutes] = useState([])
+  const [vehicles, setVehicles] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [modalOpen, setModalOpen] = useState(false)
@@ -137,6 +163,74 @@ function App() {
 
   const currentData = dataMap[activePage]?.[0] || []
 
+  // सर्व चार टेबलमधील डेटा Load करणे
+  const loadAllData = async () => {
+    setDataLoading(true)
+
+    try {
+      await Promise.all([
+        loadTable('shipments', initialShipments, setShipments),
+        loadTable('routes', initialRoutes, setRoutes),
+        loadTable('vehicles', initialVehicles, setVehicles),
+        loadTable('warehouses', initialWarehouses, setWarehouses)
+      ])
+    } catch (error) {
+      console.error('Data loading error:', error)
+      window.alert(`Database error: ${error.message}`)
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  // Login session तपासणे आणि Refresh नंतरही Login ठेवणे
+  useEffect(() => {
+    let mounted = true
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return
+
+      setSession(nextSession)
+      setIsLoggedIn(Boolean(nextSession))
+
+      if (!nextSession) {
+        setShipments([])
+        setRoutes([])
+        setVehicles([])
+        setWarehouses([])
+      }
+    })
+
+    const checkSession = async () => {
+      const { data, error } = await supabase.auth.getSession()
+
+      if (!mounted) return
+
+      if (error) {
+        setLoginError(error.message)
+      }
+
+      const currentSession = data?.session || null
+
+      setSession(currentSession)
+      setIsLoggedIn(Boolean(currentSession))
+
+      if (currentSession) {
+        await loadAllData()
+      }
+
+      if (mounted) setAuthLoading(false)
+    }
+
+    checkSession()
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
   const filteredData = useMemo(() => {
     return currentData.filter(item => {
       const matchesSearch = Object.values(item).some(value =>
@@ -150,30 +244,99 @@ function App() {
     })
   }, [currentData, search, statusFilter])
 
-  const handleLogin = event => {
-    event.preventDefault()
+  // प्रत्यक्ष Shipments मधून Chart Data
+  const monthlyData = useMemo(() => {
+    const now = new Date()
 
-    if (
-      loginEmail.trim().toLowerCase() === LOGIN_EMAIL &&
-      loginPassword === LOGIN_PASSWORD
-    ) {
-      localStorage.setItem('logitrack_logged_in', 'true')
-      setIsLoggedIn(true)
-      setLoginError('')
-      setLoginEmail('')
-      setLoginPassword('')
-      setActivePage('Dashboard')
-    } else {
-      setLoginError('Invalid email or password. Please try again.')
+    const months = Array.from({ length: 6 }, (_, index) => {
+      return new Date(now.getFullYear(), now.getMonth() - 5 + index, 1)
+    })
+
+    return months.map(monthDate => {
+      const monthItems = shipments.filter(item => {
+        if (!item.date) return false
+
+        const date = new Date(`${item.date}T00:00:00`)
+
+        return (
+          date.getFullYear() === monthDate.getFullYear() &&
+          date.getMonth() === monthDate.getMonth()
+        )
+      })
+
+      return {
+        month: monthDate.toLocaleDateString('en-IN', { month: 'short' }),
+        shipments: monthItems.length,
+        revenue: monthItems.reduce(
+          (total, item) => total + Number(item.amount || 0),
+          0
+        )
+      }
+    })
+  }, [shipments])
+
+  const statusData = useMemo(() => {
+    const statuses = ['Delivered', 'In Transit', 'Pending']
+    const total = shipments.length
+
+    return statuses.map(name => {
+      const value = shipments.filter(item => item.status === name).length
+
+      return {
+        name,
+        value,
+        percent: total ? Math.round((value / total) * 100) : 0
+      }
+    })
+  }, [shipments])
+
+  const totalRevenue = shipments.reduce(
+    (total, item) => total + Number(item.amount || 0),
+    0
+  )
+
+  // Supabase Login
+  const handleLogin = async event => {
+    event.preventDefault()
+    setLoginError('')
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword
+    })
+
+    if (error) {
+      setLoginError(
+        error.message === 'Invalid login credentials'
+          ? 'Invalid email or password. Please try again.'
+          : error.message
+      )
+      return
     }
+
+    setSession(data.session)
+    setIsLoggedIn(true)
+    setLoginEmail('')
+    setLoginPassword('')
+    setActivePage('Dashboard')
+
+    await loadAllData()
   }
 
-  const handleLogout = () => {
+  // Supabase Logout
+  const handleLogout = async () => {
     const confirmed = window.confirm('Are you sure you want to logout?')
 
     if (!confirmed) return
 
-    localStorage.removeItem('logitrack_logged_in')
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      window.alert(`Logout failed: ${error.message}`)
+      return
+    }
+
+    setSession(null)
     setIsLoggedIn(false)
     setProfileOpen(false)
     setProfileModalOpen(false)
@@ -197,41 +360,101 @@ function App() {
     setModalOpen(true)
   }
 
-  const saveItem = event => {
+  // Supabase Database मध्ये Add / Edit
+  const saveItem = async event => {
     event.preventDefault()
 
-    const [, setter] = dataMap[activePage]
+    const config = tableConfig[activePage]
+    if (!config) return
 
-    if (editingItem) {
-      setter(old => old.map(item =>
-        item.id === editingItem.id ? { ...form, id: item.id } : item
-      ))
-    } else {
-      const prefix = {
-        Shipments: 'SHP',
-        Routes: 'RTE',
-        Vehicles: 'VEH',
-        Warehouses: 'WH'
-      }[activePage]
+    setSaving(true)
 
-      const newItem = {
-        ...form,
-        id: `${prefix}-${Date.now().toString().slice(-6)}`
+    try {
+      if (editingItem) {
+        const updatedRecord = {
+          ...form,
+          id: editingItem.id
+        }
+
+        const { data, error } = await supabase
+          .from(config.table)
+          .update({ data: updatedRecord })
+          .eq('id', editingItem._dbId)
+          .select('id, data')
+          .single()
+
+        if (error) throw error
+
+        const savedItem = {
+          ...data.data,
+          id: data.data?.id || data.id,
+          _dbId: data.id
+        }
+
+        const [, setter] = dataMap[activePage]
+
+        setter(old =>
+          old.map(item =>
+            item._dbId === editingItem._dbId ? savedItem : item
+          )
+        )
+      } else {
+        const newRecord = {
+          ...form,
+          id: `${config.prefix}-${Date.now().toString().slice(-6)}`
+        }
+
+        const { data, error } = await supabase
+          .from(config.table)
+          .insert({ data: newRecord })
+          .select('id, data')
+          .single()
+
+        if (error) throw error
+
+        const savedItem = {
+          ...data.data,
+          id: data.data?.id || data.id,
+          _dbId: data.id
+        }
+
+        const [, setter] = dataMap[activePage]
+        setter(old => [savedItem, ...old])
       }
 
-      setter(old => [newItem, ...old])
+      setModalOpen(false)
+      setForm({})
+      setEditingItem(null)
+    } catch (error) {
+      console.error('Save error:', error)
+      window.alert(`Unable to save record: ${error.message}`)
+    } finally {
+      setSaving(false)
     }
-
-    setModalOpen(false)
-    setForm({})
-    setEditingItem(null)
   }
 
-  const deleteItem = id => {
-    if (!window.confirm('Are you sure you want to delete this record?')) return
+  // Supabase Database मधून Delete
+  const deleteItem = async item => {
+    if (!window.confirm('Are you sure you want to delete this record?')) {
+      return
+    }
 
+    const config = tableConfig[activePage]
     const [, setter] = dataMap[activePage]
-    setter(old => old.filter(item => item.id !== id))
+
+    try {
+      const { error } = await supabase
+        .from(config.table)
+        .delete()
+        .eq('id', item._dbId)
+
+      if (error) throw error
+
+      setter(old => old.filter(record => record._dbId !== item._dbId))
+    } catch (error) {
+      console.error('Delete error:', error)
+      window.alert(`Unable to delete record: ${error.message}`)
+    }
   }
 
   const openPage = page => {
@@ -270,10 +493,10 @@ function App() {
       </div>
 
       <div className="stats-grid">
-        <StatCard title="Total Shipments" value={shipments.length + 1240} change="+12.8%" icon={Package} tone="blue" />
-        <StatCard title="In Transit" value={shipments.filter(x => x.status === 'In Transit').length + 18} change="+8.2%" icon={Truck} tone="purple" />
-        <StatCard title="Delivered" value={shipments.filter(x => x.status === 'Delivered').length + 856} change="+15.4%" icon={CheckCircle} tone="green" />
-        <StatCard title="Pending" value={shipments.filter(x => x.status === 'Pending').length + 24} change="-2.4%" icon={Clock} tone="orange" />
+        <StatCard title="Total Shipments" value={shipments.length} change="Live data" icon={Package} tone="blue" />
+        <StatCard title="In Transit" value={shipments.filter(x => x.status === 'In Transit').length} change="Live data" icon={Truck} tone="purple" />
+        <StatCard title="Delivered" value={shipments.filter(x => x.status === 'Delivered').length} change="Live data" icon={CheckCircle} tone="green" />
+        <StatCard title="Pending" value={shipments.filter(x => x.status === 'Pending').length} change="Live data" icon={Clock} tone="orange" />
       </div>
 
       <div className="charts-grid">
@@ -316,12 +539,16 @@ function App() {
           <div className="pie-area">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88} paddingAngle={4}>
+                <Pie
+                  data={statusData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={58}
+                  outerRadius={88}
+                  paddingAngle={4}
+                >
                   {statusData.map((entry, index) => (
-                    <Cell
-                      key={entry.name}
-                      fill={['#22b573', '#3978e8', '#f5a623'][index]}
-                    />
+                    <Cell key={entry.name} fill={colors[index]} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -333,10 +560,10 @@ function App() {
                 <div key={item.name}>
                   <span
                     className="legend-dot"
-                    style={{ background: ['#22b573', '#3978e8', '#f5a623'][index] }}
+                    style={{ background: colors[index] }}
                   />
                   {item.name}
-                  <strong>{item.value}%</strong>
+                  <strong>{item.percent}%</strong>
                 </div>
               ))}
             </div>
@@ -371,7 +598,7 @@ function App() {
 
             <tbody>
               {shipments.slice(0, 5).map(item => (
-                <tr key={item.id}>
+                <tr key={item._dbId || item.id}>
                   <td className="id-cell">{item.id}</td>
                   <td>{item.customer}</td>
                   <td>{item.origin} → {item.destination}</td>
@@ -380,6 +607,14 @@ function App() {
                   <td>₹{Number(item.amount).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
+
+              {shipments.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="empty-state">
+                    No shipments found. Add your first shipment.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -436,7 +671,7 @@ function App() {
 
               <tbody>
                 {filteredData.map(item => (
-                  <tr key={item.id}>
+                  <tr key={item._dbId || item.id}>
                     {fields.map(field => (
                       <td key={field[0]}>
                         {field[0] === 'status'
@@ -460,7 +695,7 @@ function App() {
                         <button
                           className="icon-button delete"
                           title="Delete"
-                          onClick={() => deleteItem(item.id)}
+                          onClick={() => deleteItem(item)}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -498,10 +733,16 @@ function App() {
       </div>
 
       <div className="stats-grid">
-        <StatCard title="Total Revenue" value="₹3,55,000" change="+14.5%" icon={TrendingUp} tone="green" />
-        <StatCard title="Total Shipments" value={shipments.length + 1240} change="+12.8%" icon={Package} tone="blue" />
-        <StatCard title="Active Vehicles" value={vehicles.length + 18} change="+5.2%" icon={Truck} tone="purple" />
-        <StatCard title="Warehouses" value={warehouses.length + 7} change="+2.1%" icon={Warehouse} tone="orange" />
+        <StatCard
+          title="Total Revenue"
+          value={`₹${totalRevenue.toLocaleString('en-IN')}`}
+          change="Live data"
+          icon={TrendingUp}
+          tone="green"
+        />
+        <StatCard title="Total Shipments" value={shipments.length} change="Live data" icon={Package} tone="blue" />
+        <StatCard title="Active Vehicles" value={vehicles.filter(x => x.status === 'Available' || x.status === 'On Route').length} change="Live data" icon={Truck} tone="purple" />
+        <StatCard title="Warehouses" value={warehouses.length} change="Live data" icon={Warehouse} tone="orange" />
       </div>
 
       <section className="panel chart-panel report-chart">
@@ -583,49 +824,27 @@ function App() {
     </>
   )
 
+  // Loading screen
+  if (authLoading) {
+    return (
+      <div style={loadingStyle}>
+        <Truck size={35} color="#3978e8" />
+        <p>Loading LogiTrack...</p>
+      </div>
+    )
+  }
+
   // LOGIN PAGE
   if (!isLoggedIn) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-        background: 'linear-gradient(135deg, #eaf1ff, #f5f7fb)'
-      }}>
-        <div style={{
-          width: '100%',
-          maxWidth: '420px',
-          padding: '38px',
-          borderRadius: '18px',
-          background: '#ffffff',
-          boxShadow: '0 15px 50px rgba(30, 60, 110, 0.13)'
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '28px'
-          }}>
-            <div style={{
-              width: '45px',
-              height: '45px',
-              borderRadius: '12px',
-              display: 'grid',
-              placeItems: 'center',
-              background: '#3978e8',
-              color: '#fff'
-            }}>
+      <div style={loginPageStyle}>
+        <div style={loginCardStyle}>
+          <div style={loginBrandStyle}>
+            <div style={loginLogoStyle}>
               <Truck size={25} />
             </div>
 
-            <h2 style={{
-              fontSize: '27px',
-              color: '#26364d',
-              margin: 0
-            }}>
+            <h2 style={loginTitleStyle}>
               LogiTrack<span style={{ color: '#3978e8' }}>.</span>
             </h2>
           </div>
@@ -640,15 +859,7 @@ function App() {
           </div>
 
           <form onSubmit={handleLogin}>
-            <label style={{
-              display: 'block',
-              color: '#46546a',
-              fontSize: '13px',
-              fontWeight: 600,
-              marginBottom: '8px'
-            }}>
-              Email Address
-            </label>
+            <label style={loginLabelStyle}>Email Address</label>
 
             <input
               type="email"
@@ -659,14 +870,7 @@ function App() {
               style={loginInputStyle}
             />
 
-            <label style={{
-              display: 'block',
-              color: '#46546a',
-              fontSize: '13px',
-              fontWeight: 600,
-              marginBottom: '8px',
-              marginTop: '20px'
-            }}>
+            <label style={{ ...loginLabelStyle, marginTop: '20px' }}>
               Password
             </label>
 
@@ -683,65 +887,24 @@ function App() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#8995a6',
-                  cursor: 'pointer'
-                }}
+                style={passwordToggleStyle}
               >
                 {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
               </button>
             </div>
 
             {loginError && (
-              <p style={{
-                color: '#dc4545',
-                fontSize: '13px',
-                marginTop: '13px'
-              }}>
-                {loginError}
-              </p>
+              <p style={loginErrorStyle}>{loginError}</p>
             )}
 
-            <button
-              type="submit"
-              style={{
-                width: '100%',
-                marginTop: '25px',
-                padding: '14px',
-                border: 'none',
-                borderRadius: '8px',
-                background: '#3978e8',
-                color: '#fff',
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
+            <button type="submit" style={loginButtonStyle}>
               Login to Dashboard
             </button>
           </form>
 
-          <div style={{
-            marginTop: '25px',
-            padding: '13px',
-            borderRadius: '8px',
-            background: '#f4f7fc',
-            fontSize: '12px',
-            color: '#68778d',
-            lineHeight: 1.8
-          }}>
-            <strong style={{ color: '#46546a' }}>Demo Login Details</strong>
-            <br />
-            Email: {LOGIN_EMAIL}
-            <br />
-            Password: {LOGIN_PASSWORD}
-          </div>
+          <p style={loginHintStyle}>
+            Use the administrator email and password created in Supabase Authentication.
+          </p>
         </div>
       </div>
     )
@@ -823,18 +986,7 @@ function App() {
             </button>
 
             {profileOpen && (
-              <div style={{
-                position: 'absolute',
-                bottom: '58px',
-                left: 0,
-                width: '100%',
-                zIndex: 90,
-                padding: '7px',
-                background: darkMode ? '#202b3c' : '#ffffff',
-                border: '1px solid #e5eaf2',
-                borderRadius: '10px',
-                boxShadow: '0 8px 25px rgba(0,0,0,0.15)'
-              }}>
+              <div style={profileDropdownStyle(darkMode)}>
                 <button
                   type="button"
                   onClick={() => {
@@ -898,6 +1050,12 @@ function App() {
         </header>
 
         <div className="page-content">
+          {dataLoading && (
+            <p style={{ color: '#3978e8', fontSize: '12px' }}>
+              Syncing database...
+            </p>
+          )}
+
           {activePage === 'Dashboard' && renderDashboard()}
           {dataMap[activePage] && renderManagement()}
           {activePage === 'Reports' && renderReports()}
@@ -970,12 +1128,17 @@ function App() {
                   type="button"
                   className="secondary-button"
                   onClick={() => setModalOpen(false)}
+                  disabled={saving}
                 >
                   Cancel
                 </button>
 
-                <button type="submit" className="primary-button">
-                  {editingItem ? 'Save Changes' : 'Add Record'}
+                <button type="submit" className="primary-button" disabled={saving}>
+                  {saving
+                    ? 'Saving...'
+                    : editingItem
+                      ? 'Save Changes'
+                      : 'Add Record'}
                 </button>
               </div>
             </form>
@@ -1007,20 +1170,7 @@ function App() {
             </div>
 
             <div style={{ textAlign: 'center', padding: '15px 10px' }}>
-              <div style={{
-                width: '75px',
-                height: '75px',
-                margin: '0 auto 15px',
-                display: 'grid',
-                placeItems: 'center',
-                borderRadius: '50%',
-                background: '#3978e8',
-                color: '#ffffff',
-                fontSize: '30px',
-                fontWeight: '700'
-              }}>
-                A
-              </div>
+              <div style={profileAvatarStyle}>A</div>
 
               <h3 style={{ margin: '0 0 6px', color: darkMode ? '#ffffff' : '#29364a' }}>
                 Admin User
@@ -1031,14 +1181,12 @@ function App() {
               </p>
             </div>
 
-            <div style={{
-              padding: '15px',
-              background: darkMode ? '#29364a' : '#f5f7fb',
-              borderRadius: '9px'
-            }}>
+            <div style={profileDetailsStyle(darkMode)}>
               <div style={{ marginBottom: '14px' }}>
-                <small style={{ color: '#929daf' }}>Account Name</small>
-                <strong style={{ display: 'block', marginTop: '5px' }}>Admin User</strong>
+                <small style={{ color: '#929daf' }}>Account Email</small>
+                <strong style={{ display: 'block', marginTop: '5px', wordBreak: 'break-word' }}>
+                  {session?.user?.email || 'Not available'}
+                </strong>
               </div>
 
               <div style={{ marginBottom: '14px' }}>
@@ -1126,6 +1274,67 @@ function App() {
   )
 }
 
+const loadingStyle = {
+  minHeight: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '12px',
+  color: '#718096',
+  background: '#f5f7fb'
+}
+
+const loginPageStyle = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
+  background: 'linear-gradient(135deg, #eaf1ff, #f5f7fb)'
+}
+
+const loginCardStyle = {
+  width: '100%',
+  maxWidth: '420px',
+  padding: '38px',
+  borderRadius: '18px',
+  background: '#ffffff',
+  boxShadow: '0 15px 50px rgba(30, 60, 110, 0.13)'
+}
+
+const loginBrandStyle = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: '10px',
+  marginBottom: '28px'
+}
+
+const loginLogoStyle = {
+  width: '45px',
+  height: '45px',
+  borderRadius: '12px',
+  display: 'grid',
+  placeItems: 'center',
+  background: '#3978e8',
+  color: '#fff'
+}
+
+const loginTitleStyle = {
+  fontSize: '27px',
+  color: '#26364d',
+  margin: 0
+}
+
+const loginLabelStyle = {
+  display: 'block',
+  color: '#46546a',
+  fontSize: '13px',
+  fontWeight: 600,
+  marginBottom: '8px'
+}
+
 const loginInputStyle = {
   width: '100%',
   boxSizing: 'border-box',
@@ -1136,6 +1345,46 @@ const loginInputStyle = {
   fontSize: '14px',
   color: '#29364a',
   background: '#fff'
+}
+
+const passwordToggleStyle = {
+  position: 'absolute',
+  right: '12px',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  border: 'none',
+  background: 'transparent',
+  color: '#8995a6',
+  cursor: 'pointer'
+}
+
+const loginErrorStyle = {
+  color: '#dc4545',
+  fontSize: '13px',
+  marginTop: '13px'
+}
+
+const loginButtonStyle = {
+  width: '100%',
+  marginTop: '25px',
+  padding: '14px',
+  border: 'none',
+  borderRadius: '8px',
+  background: '#3978e8',
+  color: '#fff',
+  fontSize: '15px',
+  fontWeight: 600,
+  cursor: 'pointer'
+}
+
+const loginHintStyle = {
+  marginTop: '25px',
+  padding: '13px',
+  borderRadius: '8px',
+  background: '#f4f7fc',
+  fontSize: '12px',
+  color: '#68778d',
+  lineHeight: 1.8
 }
 
 const profileMenuButton = {
@@ -1153,6 +1402,38 @@ const profileMenuButton = {
   cursor: 'pointer'
 }
 
+const profileAvatarStyle = {
+  width: '75px',
+  height: '75px',
+  margin: '0 auto 15px',
+  display: 'grid',
+  placeItems: 'center',
+  borderRadius: '50%',
+  background: '#3978e8',
+  color: '#ffffff',
+  fontSize: '30px',
+  fontWeight: '700'
+}
+
+const profileDropdownStyle = darkMode => ({
+  position: 'absolute',
+  bottom: '58px',
+  left: 0,
+  width: '100%',
+  zIndex: 90,
+  padding: '7px',
+  background: darkMode ? '#202b3c' : '#ffffff',
+  border: '1px solid #e5eaf2',
+  borderRadius: '10px',
+  boxShadow: '0 8px 25px rgba(0,0,0,0.15)'
+})
+
+const profileDetailsStyle = darkMode => ({
+  padding: '15px',
+  background: darkMode ? '#29364a' : '#f5f7fb',
+  borderRadius: '9px'
+})
+
 function StatCard({ title, value, change, icon: Icon, tone }) {
   return (
     <div className="stat-card">
@@ -1164,8 +1445,8 @@ function StatCard({ title, value, change, icon: Icon, tone }) {
         <span>{title}</span>
         <strong>{value}</strong>
 
-        <small className={change.startsWith('-') ? 'negative' : 'positive'}>
-          {change} <span>vs last month</span>
+        <small className="positive">
+          {change}
         </small>
       </div>
     </div>
@@ -1173,7 +1454,7 @@ function StatCard({ title, value, change, icon: Icon, tone }) {
 }
 
 function StatusBadge({ status }) {
-  const normalized = status.toLowerCase().replaceAll(' ', '-')
+  const normalized = (status || '').toLowerCase().replaceAll(' ', '-')
 
   return (
     <span className={`status-badge ${normalized}`}>
