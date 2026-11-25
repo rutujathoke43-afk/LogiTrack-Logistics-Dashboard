@@ -169,10 +169,10 @@ function App() {
 
     try {
       await Promise.all([
-        loadTable('shipments', initialShipments, setShipments),
-        loadTable('routes', initialRoutes, setRoutes),
-        loadTable('vehicles', initialVehicles, setVehicles),
-        loadTable('warehouses', initialWarehouses, setWarehouses)
+        loadTable('shipments', setShipments),
+        loadTable('routes', setRoutes),
+        loadTable('vehicles', setVehicles),
+        loadTable('warehouses', setWarehouses)
       ])
     } catch (error) {
       console.error('Data loading error:', error)
