@@ -15,6 +15,12 @@ import {
 import { supabase } from './supabase'
 import './App.css'
 
+// ------------------------------------------------------
+// INITIAL DEMO DATA
+// ------------------------------------------------------
+// These arrays define sample records for reference.
+// The application loads actual records from Supabase.
+
 const initialShipments = [
   { id: 'SHP-1001', customer: 'Aarav Enterprises', origin: 'Mumbai', destination: 'Pune', date: '2026-11-20', status: 'In Transit', amount: 12500 },
   { id: 'SHP-1002', customer: 'Global Traders', origin: 'Delhi', destination: 'Jaipur', date: '2026-11-21', status: 'Delivered', amount: 8900 },
@@ -42,6 +48,11 @@ const initialWarehouses = [
   { id: 'WH-003', name: 'Nagpur Hub', location: 'Nagpur', capacity: '92%', manager: 'Rohit Deshmukh', status: 'Full' }
 ]
 
+// ------------------------------------------------------
+// APPLICATION CONFIGURATION
+// ------------------------------------------------------
+
+// Maps application sections to their Supabase tables and ID prefixes.
 const tableConfig = {
   Shipments: { table: 'shipments', prefix: 'SHP', initial: initialShipments },
   Routes: { table: 'routes', prefix: 'RTE', initial: initialRoutes },
@@ -49,6 +60,7 @@ const tableConfig = {
   Warehouses: { table: 'warehouses', prefix: 'WH', initial: initialWarehouses }
 }
 
+// Sidebar navigation configuration.
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Shipments', icon: Package },
@@ -59,6 +71,7 @@ const navItems = [
   { name: 'Settings', icon: Settings }
 ]
 
+// Defines the input fields displayed in Add/Edit forms.
 const fieldConfig = {
   Shipments: [
     ['customer', 'Customer', 'text'],
@@ -91,28 +104,29 @@ const fieldConfig = {
   ]
 }
 
+// Colors used in the shipment status chart.
 const colors = ['#22b573', '#3978e8', '#f5a623']
 
-// Supabase मधून डेटा आणणे.
-// टेबल रिकामे असल्यास सुरुवातीचा Demo Data एकदाच Save होईल.
-async function loadTable(tableName, initialData, setter) {
-  let { data, error } = await supabase
+// ------------------------------------------------------
+// DATABASE HELPER
+// ------------------------------------------------------
+
+/**
+ * Fetches records from a Supabase table and updates React state.
+ *
+ * @param {string} tableName - Supabase table name.
+ * @param {Function} setter - React state setter for the records.
+ * @throws {Error} When the database request fails.
+ */
+async function loadTable(tableName, setter) {
+  const { data, error } = await supabase
     .from(tableName)
     .select('id, data')
     .order('created_at', { ascending: false })
 
   if (error) throw error
 
-  if (data.length === 0 && initialData.length > 0) {
-    const result = await supabase
-      .from(tableName)
-      .insert(initialData.map(item => ({ data: item })))
-      .select('id, data')
-
-    if (result.error) throw result.error
-    data = result.data || []
-  }
-
+  // Convert Supabase rows into application record objects.
   setter(
     (data || []).map(row => ({
       ...row.data,
@@ -122,26 +136,35 @@ async function loadTable(tableName, initialData, setter) {
   )
 }
 
+// ------------------------------------------------------
+// MAIN APPLICATION COMPONENT
+// ------------------------------------------------------
+
 function App() {
+  // Authentication and loading states.
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [session, setSession] = useState(null)
 
+  // Login form states.
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
 
+  // Navigation and sidebar states.
   const [activePage, setActivePage] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Data states for all management modules.
   const [shipments, setShipments] = useState([])
   const [routes, setRoutes] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [warehouses, setWarehouses] = useState([])
 
+  // Search, filter and modal states.
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [modalOpen, setModalOpen] = useState(false)
@@ -150,10 +173,13 @@ function App() {
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [form, setForm] = useState({})
+
+  // Application preference and support states.
   const [darkMode, setDarkMode] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [supportMessage, setSupportMessage] = useState('')
 
+  // Connects each management section to its data and setter.
   const dataMap = {
     Shipments: [shipments, setShipments],
     Routes: [routes, setRoutes],
@@ -161,9 +187,17 @@ function App() {
     Warehouses: [warehouses, setWarehouses]
   }
 
+  // Records displayed for the currently selected management section.
   const currentData = dataMap[activePage]?.[0] || []
 
-  // सर्व चार टेबलमधील डेटा Load करणे
+  // ------------------------------------------------------
+  // LOAD ALL APPLICATION DATA
+  // ------------------------------------------------------
+
+  /**
+   * Loads all four data modules concurrently from Supabase.
+   * Displays an error if any database request fails.
+   */
   const loadAllData = async () => {
     setDataLoading(true)
 
@@ -182,7 +216,14 @@ function App() {
     }
   }
 
-  // Login session तपासणे आणि Refresh नंतरही Login ठेवणे
+  // ------------------------------------------------------
+  // AUTHENTICATION SESSION MANAGEMENT
+  // ------------------------------------------------------
+
+  /**
+   * Checks the saved Supabase session when the application starts.
+   * Subscribes to authentication changes and loads records for logged-in users.
+   */
   useEffect(() => {
     let mounted = true
 
@@ -194,6 +235,7 @@ function App() {
       setSession(nextSession)
       setIsLoggedIn(Boolean(nextSession))
 
+      // Clear application data when the user logs out.
       if (!nextSession) {
         setShipments([])
         setRoutes([])
@@ -225,12 +267,21 @@ function App() {
 
     checkSession()
 
+    // Clean up the auth subscription when the component unmounts.
     return () => {
       mounted = false
       subscription.unsubscribe()
     }
   }, [])
 
+  // ------------------------------------------------------
+  // SEARCH AND FILTER
+  // ------------------------------------------------------
+
+  /**
+   * Filters the currently selected records using the search text
+   * and selected status.
+   */
   const filteredData = useMemo(() => {
     return currentData.filter(item => {
       const matchesSearch = Object.values(item).some(value =>
@@ -244,7 +295,11 @@ function App() {
     })
   }, [currentData, search, statusFilter])
 
-  // प्रत्यक्ष Shipments मधून Chart Data
+  // ------------------------------------------------------
+  // DASHBOARD AND REPORT ANALYTICS
+  // ------------------------------------------------------
+
+  // Calculates shipment count and revenue for the previous six months.
   const monthlyData = useMemo(() => {
     const now = new Date()
 
@@ -275,6 +330,7 @@ function App() {
     })
   }, [shipments])
 
+  // Calculates the distribution of delivered, in-transit and pending shipments.
   const statusData = useMemo(() => {
     const statuses = ['Delivered', 'In Transit', 'Pending']
     const total = shipments.length
@@ -290,12 +346,19 @@ function App() {
     })
   }, [shipments])
 
+  // Calculates total shipment revenue.
   const totalRevenue = shipments.reduce(
     (total, item) => total + Number(item.amount || 0),
     0
   )
 
-  // Supabase Login
+  // ------------------------------------------------------
+  // LOGIN AND LOGOUT HANDLERS
+  // ------------------------------------------------------
+
+  /**
+   * Authenticates the administrator using Supabase email and password.
+   */
   const handleLogin = async event => {
     event.preventDefault()
     setLoginError('')
@@ -323,7 +386,10 @@ function App() {
     await loadAllData()
   }
 
-  // Supabase Logout
+  /**
+   * Signs out the current administrator after confirmation.
+   * Clears user-specific interface state after successful logout.
+   */
   const handleLogout = async () => {
     const confirmed = window.confirm('Are you sure you want to logout?')
 
@@ -348,19 +414,32 @@ function App() {
     setLoginPassword('')
   }
 
+  // ------------------------------------------------------
+  // ADD AND EDIT FORM HANDLERS
+  // ------------------------------------------------------
+
+  // Opens the form in Add mode and clears previous values.
   const openAdd = () => {
     setEditingItem(null)
     setForm({})
     setModalOpen(true)
   }
 
+  // Opens the form with the selected record's existing values.
   const openEdit = item => {
     setEditingItem(item)
     setForm({ ...item })
     setModalOpen(true)
   }
 
-  // Supabase Database मध्ये Add / Edit
+  // ------------------------------------------------------
+  // CREATE AND UPDATE DATABASE RECORDS
+  // ------------------------------------------------------
+
+  /**
+   * Saves a new record or updates an existing record
+   * in the currently selected Supabase table.
+   */
   const saveItem = async event => {
     event.preventDefault()
 
@@ -371,6 +450,7 @@ function App() {
 
     try {
       if (editingItem) {
+        // Update an existing database record.
         const updatedRecord = {
           ...form,
           id: editingItem.id
@@ -393,12 +473,14 @@ function App() {
 
         const [, setter] = dataMap[activePage]
 
+        // Replace the old record in React state.
         setter(old =>
           old.map(item =>
             item._dbId === editingItem._dbId ? savedItem : item
           )
         )
       } else {
+        // Create a new record with a unique application ID.
         const newRecord = {
           ...form,
           id: `${config.prefix}-${Date.now().toString().slice(-6)}`
@@ -419,9 +501,12 @@ function App() {
         }
 
         const [, setter] = dataMap[activePage]
+
+        // Add the newly saved record to the top of the list.
         setter(old => [savedItem, ...old])
       }
 
+      // Close and reset the form after a successful save.
       setModalOpen(false)
       setForm({})
       setEditingItem(null)
@@ -433,7 +518,13 @@ function App() {
     }
   }
 
-  // Supabase Database मधून Delete
+  // ------------------------------------------------------
+  // DELETE DATABASE RECORD
+  // ------------------------------------------------------
+
+  /**
+   * Deletes a selected record from Supabase after confirmation.
+   */
   const deleteItem = async item => {
     if (!window.confirm('Are you sure you want to delete this record?')) {
       return
@@ -450,6 +541,7 @@ function App() {
 
       if (error) throw error
 
+      // Remove the deleted record from the displayed list.
       setter(old => old.filter(record => record._dbId !== item._dbId))
     } catch (error) {
       console.error('Delete error:', error)
@@ -457,6 +549,11 @@ function App() {
     }
   }
 
+  // ------------------------------------------------------
+  // NAVIGATION AND SUPPORT
+  // ------------------------------------------------------
+
+  // Changes the active page and resets search and filter controls.
   const openPage = page => {
     setActivePage(page)
     setSearch('')
@@ -465,6 +562,7 @@ function App() {
     setProfileOpen(false)
   }
 
+  // Opens the user's configured email application with a support request.
   const sendSupportEmail = () => {
     const subject = encodeURIComponent('LogiTrack Support Request')
     const body = encodeURIComponent(
@@ -475,6 +573,11 @@ function App() {
       `mailto:support@logitrack.com?subject=${subject}&body=${body}`
   }
 
+  // ------------------------------------------------------
+  // DASHBOARD VIEW
+  // ------------------------------------------------------
+
+  // Displays shipment summary cards, charts and recent shipment records.
   const renderDashboard = () => (
     <>
       <div className="welcome-row">
@@ -622,6 +725,11 @@ function App() {
     </>
   )
 
+  // ------------------------------------------------------
+  // MANAGEMENT VIEWS
+  // ------------------------------------------------------
+
+  // Reusable table view for Shipments, Routes, Vehicles and Warehouses.
   const renderManagement = () => {
     const fields = fieldConfig[activePage]
     const statuses = [...new Set(currentData.map(item => item.status))]
@@ -723,6 +831,11 @@ function App() {
     )
   }
 
+  // ------------------------------------------------------
+  // REPORTS VIEW
+  // ------------------------------------------------------
+
+  // Displays live revenue, shipment, vehicle and warehouse statistics.
   const renderReports = () => (
     <>
       <div className="welcome-row">
@@ -768,6 +881,11 @@ function App() {
     </>
   )
 
+  // ------------------------------------------------------
+  // SETTINGS VIEW
+  // ------------------------------------------------------
+
+  // Provides application appearance, notification and support preferences.
   const renderSettings = () => (
     <>
       <div className="welcome-row">
@@ -824,7 +942,12 @@ function App() {
     </>
   )
 
-  // Loading screen
+  // ------------------------------------------------------
+  // APPLICATION LOADING SCREEN
+  // ------------------------------------------------------
+
+  // Prevents the login or dashboard screen from appearing
+  // until the Supabase authentication session has been checked.
   if (authLoading) {
     return (
       <div style={loadingStyle}>
@@ -834,7 +957,11 @@ function App() {
     )
   }
 
+  // ------------------------------------------------------
   // LOGIN PAGE
+  // ------------------------------------------------------
+
+  // Displays the administrator login form when no session exists.
   if (!isLoggedIn) {
     return (
       <div style={loginPageStyle}>
@@ -910,8 +1037,14 @@ function App() {
     )
   }
 
+  // ------------------------------------------------------
+  // MAIN DASHBOARD LAYOUT
+  // ------------------------------------------------------
+
+  // Renders the sidebar, header, selected page and footer after login.
   return (
     <div className={`app-shell ${darkMode ? 'dark-mode' : ''}`}>
+      {/* Overlay closes the mobile sidebar when clicked. */}
       {sidebarOpen && (
         <div
           className="sidebar-overlay"
@@ -919,6 +1052,7 @@ function App() {
         />
       )}
 
+      {/* Sidebar navigation and administrator profile menu. */}
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand">
           <div className="brand-icon"><Truck size={23} /></div>
@@ -955,6 +1089,7 @@ function App() {
             </button>
           </div>
 
+          {/* Administrator profile dropdown. */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
@@ -1019,6 +1154,7 @@ function App() {
         </div>
       </aside>
 
+      {/* Main page content area. */}
       <main className="main-content">
         <header className="topbar">
           <div className="topbar-left">
@@ -1049,6 +1185,7 @@ function App() {
           </div>
         </header>
 
+        {/* Selected page is rendered according to the active navigation item. */}
         <div className="page-content">
           {dataLoading && (
             <p style={{ color: '#3978e8', fontSize: '12px' }}>
@@ -1067,7 +1204,9 @@ function App() {
         </footer>
       </main>
 
-      {/* ADD / EDIT MODAL */}
+      {/* --------------------------------------------------
+          ADD / EDIT RECORD MODAL
+      -------------------------------------------------- */}
       {modalOpen && (
         <div
           className="modal-overlay"
@@ -1146,7 +1285,9 @@ function App() {
         </div>
       )}
 
-      {/* MY PROFILE MODAL */}
+      {/* --------------------------------------------------
+          ADMINISTRATOR PROFILE MODAL
+      -------------------------------------------------- */}
       {profileModalOpen && (
         <div
           className="modal-overlay"
@@ -1212,7 +1353,9 @@ function App() {
         </div>
       )}
 
-      {/* CONTACT SUPPORT MODAL */}
+      {/* --------------------------------------------------
+          CONTACT SUPPORT MODAL
+      -------------------------------------------------- */}
       {supportOpen && (
         <div
           className="modal-overlay support-overlay"
@@ -1274,6 +1417,11 @@ function App() {
   )
 }
 
+// ------------------------------------------------------
+// INLINE STYLES
+// ------------------------------------------------------
+
+// Styles used by the initial loading screen.
 const loadingStyle = {
   minHeight: '100vh',
   display: 'flex',
@@ -1285,6 +1433,7 @@ const loadingStyle = {
   background: '#f5f7fb'
 }
 
+// Styles for the administrator login page.
 const loginPageStyle = {
   minHeight: '100vh',
   display: 'flex',
@@ -1387,6 +1536,7 @@ const loginHintStyle = {
   lineHeight: 1.8
 }
 
+// Shared style for profile dropdown menu buttons.
 const profileMenuButton = {
   display: 'flex',
   alignItems: 'center',
@@ -1402,6 +1552,7 @@ const profileMenuButton = {
   cursor: 'pointer'
 }
 
+// Administrator avatar style used in the profile modal.
 const profileAvatarStyle = {
   width: '75px',
   height: '75px',
@@ -1415,6 +1566,7 @@ const profileAvatarStyle = {
   fontWeight: '700'
 }
 
+// Returns the profile dropdown appearance for the current theme.
 const profileDropdownStyle = darkMode => ({
   position: 'absolute',
   bottom: '58px',
@@ -1428,12 +1580,22 @@ const profileDropdownStyle = darkMode => ({
   boxShadow: '0 8px 25px rgba(0,0,0,0.15)'
 })
 
+// Returns profile details panel appearance for the current theme.
 const profileDetailsStyle = darkMode => ({
   padding: '15px',
   background: darkMode ? '#29364a' : '#f5f7fb',
   borderRadius: '9px'
 })
 
+// ------------------------------------------------------
+// REUSABLE COMPONENTS
+// ------------------------------------------------------
+
+/**
+ * Displays a dashboard statistic with an icon, title and value.
+ *
+ * @param {Object} props - Card display properties.
+ */
 function StatCard({ title, value, change, icon: Icon, tone }) {
   return (
     <div className="stat-card">
@@ -1453,6 +1615,12 @@ function StatCard({ title, value, change, icon: Icon, tone }) {
   )
 }
 
+/**
+ * Displays a colored status label for a shipment or other record.
+ *
+ * @param {Object} props - Status display properties.
+ * @param {string} props.status - Current record status.
+ */
 function StatusBadge({ status }) {
   const normalized = (status || '').toLowerCase().replaceAll(' ', '-')
 
@@ -1463,4 +1631,5 @@ function StatusBadge({ status }) {
   )
 }
 
+// Exports the main application component for the Vite entry point.
 export default App
