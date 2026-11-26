@@ -107,6 +107,15 @@ const fieldConfig = {
 // Colors used in the shipment status chart.
 const colors = ['#22b573', '#3978e8', '#f5a623']
 
+// Converts missing or invalid monetary values to zero for reliable analytics.
+const getAmount = item => {
+  const amount = Number(item?.amount)
+  return Number.isFinite(amount) ? amount : 0
+}
+
+// Normalizes status text so analytics are not affected by letter casing.
+const normalizeStatus = status => String(status || '').trim().toLowerCase()
+
 // ------------------------------------------------------
 // DATABASE HELPER
 // ------------------------------------------------------
@@ -299,33 +308,46 @@ function App() {
   // DASHBOARD AND REPORT ANALYTICS
   // ------------------------------------------------------
 
-  // Calculates shipment count and revenue for the previous six months.
+  // Shared metrics keep Dashboard and Reports consistent after every data change.
+  const dashboardStats = useMemo(() => {
+    const countStatus = status =>
+      shipments.filter(item => normalizeStatus(item.status) === normalizeStatus(status)).length
+
+    return {
+      totalShipments: shipments.length,
+      inTransit: countStatus('In Transit'),
+      delivered: countStatus('Delivered'),
+      pending: countStatus('Pending'),
+      totalRevenue: shipments.reduce((total, item) => total + getAmount(item), 0),
+      activeVehicles: vehicles.filter(item =>
+        ['available', 'on route'].includes(normalizeStatus(item.status))
+      ).length,
+      totalWarehouses: warehouses.length
+    }
+  }, [shipments, vehicles, warehouses])
+
+  // Calculates shipment count and revenue for the previous six calendar months.
   const monthlyData = useMemo(() => {
     const now = new Date()
-
-    const months = Array.from({ length: 6 }, (_, index) => {
-      return new Date(now.getFullYear(), now.getMonth() - 5 + index, 1)
-    })
+    const months = Array.from({ length: 6 }, (_, index) =>
+      new Date(now.getFullYear(), now.getMonth() - 5 + index, 1)
+    )
 
     return months.map(monthDate => {
       const monthItems = shipments.filter(item => {
         if (!item.date) return false
 
         const date = new Date(`${item.date}T00:00:00`)
+        if (Number.isNaN(date.getTime())) return false
 
-        return (
-          date.getFullYear() === monthDate.getFullYear() &&
+        return date.getFullYear() === monthDate.getFullYear() &&
           date.getMonth() === monthDate.getMonth()
-        )
       })
 
       return {
         month: monthDate.toLocaleDateString('en-IN', { month: 'short' }),
         shipments: monthItems.length,
-        revenue: monthItems.reduce(
-          (total, item) => total + Number(item.amount || 0),
-          0
-        )
+        revenue: monthItems.reduce((total, item) => total + getAmount(item), 0)
       }
     })
   }, [shipments])
@@ -333,10 +355,14 @@ function App() {
   // Calculates the distribution of delivered, in-transit and pending shipments.
   const statusData = useMemo(() => {
     const statuses = ['Delivered', 'In Transit', 'Pending']
-    const total = shipments.length
+    const total = dashboardStats.totalShipments
 
     return statuses.map(name => {
-      const value = shipments.filter(item => item.status === name).length
+      const value = dashboardStats[{
+        Delivered: 'delivered',
+        'In Transit': 'inTransit',
+        Pending: 'pending'
+      }[name]]
 
       return {
         name,
@@ -344,13 +370,9 @@ function App() {
         percent: total ? Math.round((value / total) * 100) : 0
       }
     })
-  }, [shipments])
+  }, [dashboardStats])
 
-  // Calculates total shipment revenue.
-  const totalRevenue = shipments.reduce(
-    (total, item) => total + Number(item.amount || 0),
-    0
-  )
+  const totalRevenue = dashboardStats.totalRevenue
 
   // ------------------------------------------------------
   // LOGIN AND LOGOUT HANDLERS
@@ -596,10 +618,10 @@ function App() {
       </div>
 
       <div className="stats-grid">
-        <StatCard title="Total Shipments" value={shipments.length} change="Live data" icon={Package} tone="blue" />
-        <StatCard title="In Transit" value={shipments.filter(x => x.status === 'In Transit').length} change="Live data" icon={Truck} tone="purple" />
-        <StatCard title="Delivered" value={shipments.filter(x => x.status === 'Delivered').length} change="Live data" icon={CheckCircle} tone="green" />
-        <StatCard title="Pending" value={shipments.filter(x => x.status === 'Pending').length} change="Live data" icon={Clock} tone="orange" />
+        <StatCard title="Total Shipments" value={dashboardStats.totalShipments} change="Live data" icon={Package} tone="blue" />
+        <StatCard title="In Transit" value={dashboardStats.inTransit} change="Live data" icon={Truck} tone="purple" />
+        <StatCard title="Delivered" value={dashboardStats.delivered} change="Live data" icon={CheckCircle} tone="green" />
+        <StatCard title="Pending" value={dashboardStats.pending} change="Live data" icon={Clock} tone="orange" />
       </div>
 
       <div className="charts-grid">
@@ -853,9 +875,9 @@ function App() {
           icon={TrendingUp}
           tone="green"
         />
-        <StatCard title="Total Shipments" value={shipments.length} change="Live data" icon={Package} tone="blue" />
-        <StatCard title="Active Vehicles" value={vehicles.filter(x => x.status === 'Available' || x.status === 'On Route').length} change="Live data" icon={Truck} tone="purple" />
-        <StatCard title="Warehouses" value={warehouses.length} change="Live data" icon={Warehouse} tone="orange" />
+        <StatCard title="Total Shipments" value={dashboardStats.totalShipments} change="Live data" icon={Package} tone="blue" />
+        <StatCard title="Active Vehicles" value={dashboardStats.activeVehicles} change="Live data" icon={Truck} tone="purple" />
+        <StatCard title="Warehouses" value={dashboardStats.totalWarehouses} change="Live data" icon={Warehouse} tone="orange" />
       </div>
 
       <section className="panel chart-panel report-chart">
